@@ -17,6 +17,7 @@ package render
 import (
 	"bytes"
 	"fmt"
+	htmlTemplate "html/template"
 	"io"
 	"path"
 	"sort"
@@ -94,7 +95,7 @@ func (mw *mdWriter) write(nodes ...types.Node) error {
 		case *types.URLNode:
 			mw.url(n)
 		case *types.ButtonNode:
-			mw.write(n.Content.Nodes...)
+			mw.button(n)
 		case *types.CodeNode:
 			mw.code(n)
 		case *types.ListNode:
@@ -106,8 +107,8 @@ func (mw *mdWriter) write(nodes ...types.Node) error {
 			mw.write(n.Content.Nodes...)
 		case *types.ItemsListNode:
 			mw.itemsList(n)
-		//case *types.GridNode:
-		//	mw.grid(n)
+		case *types.GridNode:
+			mw.grid(n)
 		case *types.InfoboxNode:
 			mw.infobox(n)
 		//case *types.SurveyNode:
@@ -169,21 +170,71 @@ func (mw *mdWriter) image(n *types.ImageNode) {
 	mw.writeString("/>")
 }
 
-func (mw *mdWriter) url(n *types.URLNode) {
-	mw.space()
-	if n.URL != "" {
-		mw.writeString("[")
-	}
-	for _, cn := range n.Content.Nodes {
-		if t, ok := cn.(*types.TextNode); ok {
-			mw.writeString(t.Value)
+
+func (mw *mdWriter) grid(n *types.GridNode) {
+	// NOTES: Takes from HTML Render
+	mw.writeString("<table>\n")
+	for _, r := range n.Rows {
+		mw.writeString("<tr>")
+		for _, c := range r {
+			mw.writeFmt(`<td colspan="%d" rowspan="%d">`, c.Colspan, c.Rowspan)
+			mw.write(c.Content.Nodes...)
+			mw.writeString("</td>")
 		}
+		mw.writeString("</tr>\n")
 	}
+	mw.writeString("</table>")
+}
+
+func (md *mdWriter) writeFmt(f string, a ...interface{}) {
+	// NOTES: Takes from HTML Render
+	md.writeString(fmt.Sprintf(f, a...))
+}
+
+func (mw *mdWriter) url(n *types.URLNode) {
+	// NOTES: Takes from HTML Render
+	mw.writeString("<a")
 	if n.URL != "" {
-		mw.writeString("](")
+		mw.writeString(` href="`)
 		mw.writeString(n.URL)
-		mw.writeString(")")
+		mw.writeBytes(doubleQuote)
 	}
+	if n.Name != "" {
+		mw.writeString(` name="`)
+		mw.writeEscape(n.Name)
+		mw.writeBytes(doubleQuote)
+	}
+	if n.Target != "" {
+		mw.writeString(` target="`)
+		mw.writeEscape(n.Target)
+		mw.writeBytes(doubleQuote)
+	}
+	mw.writeBytes(greaterThan)
+	mw.write(n.Content.Nodes...)
+	mw.writeString("</a>")
+}
+
+func (mw *mdWriter) button(n *types.ButtonNode) {
+	// NOTES: Takes from HTML Render
+	mw.writeString("<paper-button")
+	if n.Colored {
+		mw.writeString(` class="colored"`)
+	}
+	if n.Raised {
+		mw.writeString(" raised")
+	}
+	mw.writeBytes(greaterThan)
+	if n.Download {
+		mw.writeString(`<iron-icon icon="file-download"></iron-icon>`)
+	}
+	mw.write(n.Content.Nodes...)
+	mw.writeString("</paper-button>")
+}
+
+
+func (mw *mdWriter) writeEscape(s string) {
+	s = htmlTemplate.HTMLEscapeString(s)
+	mw.writeString(ReplaceDoubleCurlyBracketsWithEntity(s))
 }
 
 func (mw *mdWriter) code(n *types.CodeNode) {
